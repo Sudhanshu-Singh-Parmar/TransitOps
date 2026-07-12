@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, Truck, Mail, Lock, Shield, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, Truck, Mail, Lock, Shield, ChevronRight, CheckCircle2, User as UserIcon, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { DEMO_ACCOUNTS, ROLE_LABELS } from '../utils/constants';
 import toast from 'react-hot-toast';
 
 const Login = () => {
-  const { login, isAuthenticated, isLoading } = useAuth();
+  const { login, register, isAuthenticated, isLoading } = useAuth();
+  const [isRegister, setIsRegister] = useState(false);
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('fleet_manager');
+  const [department, setDepartment] = useState('Operations');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -20,9 +24,11 @@ const Login = () => {
 
   const validate = () => {
     const errs = {};
+    if (isRegister && !name.trim()) errs.name = 'Full name is required';
     if (!email) errs.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Invalid email address';
     if (!password) errs.password = 'Password is required';
+    else if (isRegister && password.length < 6) errs.password = 'Password must be at least 6 characters';
     return errs;
   };
 
@@ -33,14 +39,20 @@ const Login = () => {
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setErrors({});
     try {
-      await login(email, password);
-      toast.success('Welcome to TransitOps!');
+      if (isRegister) {
+        await register(name, email, password, role, department);
+        toast.success('Registration successful! Welcome to TransitOps!');
+      } else {
+        await login(email, password);
+        toast.success('Welcome back to TransitOps!');
+      }
     } catch (err) {
-      setLoginError(err.message || 'Login failed');
+      setLoginError(err.message || 'Authentication failed');
     }
   };
 
   const fillDemo = (account) => {
+    setIsRegister(false);
     setEmail(account.email);
     setPassword(account.password);
     setSelectedRole(account.role);
@@ -204,71 +216,108 @@ const Login = () => {
           {/* Header */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-              Welcome back
+              {isRegister ? 'Create Account' : 'Welcome back'}
             </h2>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              Sign in to your TransitOps account
+              {isRegister ? 'Register your new backend account' : 'Sign in to your TransitOps account'}
             </p>
           </div>
 
-          {/* Demo Quick Select */}
-          <div className="mb-6">
-            <p className="text-xs font-medium mb-3" style={{ color: 'var(--text-muted)' }}>
-              QUICK ACCESS — DEMO ACCOUNTS
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {DEMO_ACCOUNTS.map(account => (
-                <motion.button
-                  key={account.id}
-                  type="button"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => fillDemo(account)}
-                  className="relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer"
-                  style={{
-                    background: selectedRole === account.role
-                      ? `rgba(${account.role === 'fleet_manager' ? '135,90,123' : account.role === 'driver' ? '59,130,246' : account.role === 'safety_officer' ? '34,197,94' : '245,158,11'},0.1)`
-                      : 'var(--bg-surface-2)',
-                    borderColor: selectedRole === account.role
-                      ? roleColors[account.role] + '50'
-                      : 'var(--border-color)',
-                  }}
-                >
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                    style={{ background: roleColors[account.role] }}>
-                    {account.avatar}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-                      {account.name.split(' ')[0]}
+          {/* Demo Quick Select (Only show on Login mode) */}
+          {!isRegister && (
+            <div className="mb-6">
+              <p className="text-xs font-medium mb-3" style={{ color: 'var(--text-muted)' }}>
+                QUICK ACCESS — DEMO ACCOUNTS
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {DEMO_ACCOUNTS.map(account => (
+                  <motion.button
+                    key={account.id}
+                    type="button"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => fillDemo(account)}
+                    className="relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer"
+                    style={{
+                      background: selectedRole === account.role
+                        ? `rgba(${account.role === 'fleet_manager' ? '135,90,123' : account.role === 'driver' ? '59,130,246' : account.role === 'safety_officer' ? '34,197,94' : '245,158,11'},0.1)`
+                        : 'var(--bg-surface-2)',
+                      borderColor: selectedRole === account.role
+                        ? roleColors[account.role] + '50'
+                        : 'var(--border-color)',
+                    }}
+                  >
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                      style={{ background: roleColors[account.role] }}>
+                      {account.avatar}
                     </div>
-                    <div className="text-2xs truncate" style={{ color: 'var(--text-muted)' }}>
-                      {ROLE_LABELS[account.role]}
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                        {account.name.split(' ')[0]}
+                      </div>
+                      <div className="text-2xs truncate" style={{ color: 'var(--text-muted)' }}>
+                        {ROLE_LABELS[account.role]}
+                      </div>
                     </div>
-                  </div>
-                  {selectedRole === account.role && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute top-1.5 right-1.5"
-                    >
-                      <CheckCircle2 size={12} style={{ color: roleColors[account.role] }} />
-                    </motion.div>
-                  )}
-                </motion.button>
-              ))}
+                    {selectedRole === account.role && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute top-1.5 right-1.5"
+                      >
+                        <CheckCircle2 size={12} style={{ color: roleColors[account.role] }} />
+                      </motion.div>
+                    )}
+                  </motion.button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Divider */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex-1 h-px" style={{ background: 'var(--border-color)' }} />
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>or enter manually</span>
-            <div className="flex-1 h-px" style={{ background: 'var(--border-color)' }} />
-          </div>
+          {!isRegister && (
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex-1 h-px" style={{ background: 'var(--border-color)' }} />
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>or enter manually</span>
+              <div className="flex-1 h-px" style={{ background: 'var(--border-color)' }} />
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            
+            {/* Full Name (Register Only) */}
+            {isRegister && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  Full Name
+                </label>
+                <div className="relative">
+                  <UserIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Enter your name"
+                    className={`input pl-9 ${errors.name ? 'border-red-400' : ''}`}
+                    autoComplete="name"
+                  />
+                </div>
+                <AnimatePresence>
+                  {errors.name && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="text-xs mt-1 text-red-500"
+                    >
+                      {errors.name}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
             {/* Email */}
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
@@ -337,33 +386,71 @@ const Login = () => {
               </AnimatePresence>
             </div>
 
-            {/* Remember Me + Forgot */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <div
-                  onClick={() => setRememberMe(p => !p)}
-                  className="w-4 h-4 rounded border-2 flex items-center justify-center transition-colors cursor-pointer"
-                  style={{
-                    borderColor: rememberMe ? '#875A7B' : 'var(--border-color)',
-                    background: rememberMe ? '#875A7B' : 'transparent',
-                  }}
-                >
-                  {rememberMe && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                    <CheckCircle2 size={10} className="text-white" />
-                  </motion.div>}
+            {/* Role & Department (Register Only) */}
+            {isRegister && (
+              <div className="grid grid-cols-2 gap-3 animate-fade-in">
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    System Role
+                  </label>
+                  <select
+                    value={role}
+                    onChange={e => setRole(e.target.value)}
+                    className="input py-2 pr-4 bg-transparent outline-none cursor-pointer"
+                  >
+                    <option value="fleet_manager">Fleet Manager</option>
+                    <option value="driver">Driver</option>
+                    <option value="safety_officer">Safety Officer</option>
+                    <option value="financial_analyst">Financial Analyst</option>
+                  </select>
                 </div>
-                <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Remember me</span>
-              </label>
-              <button type="button" className="text-xs font-medium transition-colors"
-                style={{ color: '#875A7B' }}
-                onMouseEnter={e => e.target.style.color = '#a57098'}
-                onMouseLeave={e => e.target.style.color = '#875A7B'}
-              >
-                Forgot password?
-              </button>
-            </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Department
+                  </label>
+                  <div className="relative">
+                    <Briefcase size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      value={department}
+                      onChange={e => setDepartment(e.target.value)}
+                      placeholder="e.g. Logistics"
+                      className="input pl-9"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
-            {/* Login Error */}
+            {/* Remember Me (Login Only) */}
+            {!isRegister && (
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <div
+                    onClick={() => setRememberMe(p => !p)}
+                    className="w-4 h-4 rounded border-2 flex items-center justify-center transition-colors cursor-pointer"
+                    style={{
+                      borderColor: rememberMe ? '#875A7B' : 'var(--border-color)',
+                      background: rememberMe ? '#875A7B' : 'transparent',
+                    }}
+                  >
+                    {rememberMe && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                      <CheckCircle2 size={10} className="text-white" />
+                    </motion.div>}
+                  </div>
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Remember me</span>
+                </label>
+                <button type="button" className="text-xs font-medium transition-colors"
+                  style={{ color: '#875A7B' }}
+                  onMouseEnter={e => e.target.style.color = '#a57098'}
+                  onMouseLeave={e => e.target.style.color = '#875A7B'}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
+            {/* Form Validation Error Banner */}
             <AnimatePresence>
               {loginError && (
                 <motion.div
@@ -397,43 +484,60 @@ const Login = () => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Signing in...
+                  {isRegister ? 'Creating account...' : 'Signing in...'}
                 </>
               ) : (
                 <>
-                  Sign In
+                  {isRegister ? 'Create Account' : 'Sign In'}
                   <ChevronRight size={16} />
                 </>
               )}
             </motion.button>
           </form>
 
-          {/* Access info */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="mt-6 p-4 rounded-xl border"
-            style={{ background: 'var(--bg-surface-2)', borderColor: 'var(--border-color)' }}
-          >
-            <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
-              Access scoped by role after login:
-            </p>
-            <div className="space-y-1">
-              {[
-                { role: 'Fleet Manager', access: 'Full fleet, maintenance, analytics' },
-                { role: 'Driver', access: 'Dashboard, own trips' },
-                { role: 'Safety Officer', access: 'Drivers, compliance, reports' },
-                { role: 'Financial Analyst', access: 'Fuel, expenses, analytics' },
-              ].map(r => (
-                <div key={r.role} className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>{r.role}</span>
-                  <span>→</span>
-                  <span>{r.access}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
+          {/* Toggle Login/Register Link */}
+          <div className="mt-5 text-center">
+            <button
+              onClick={() => {
+                setIsRegister(p => !p);
+                setLoginError('');
+                setErrors({});
+              }}
+              className="text-xs font-semibold hover:underline"
+              style={{ color: '#875A7B' }}
+            >
+              {isRegister ? 'Already have an account? Sign In' : "Don't have an account? Register"}
+            </button>
+          </div>
+
+          {/* Access info (Only show on Login mode) */}
+          {!isRegister && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="mt-6 p-4 rounded-xl border"
+              style={{ background: 'var(--bg-surface-2)', borderColor: 'var(--border-color)' }}
+            >
+              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
+                Access scoped by role after login:
+              </p>
+              <div className="space-y-1">
+                {[
+                  { role: 'Fleet Manager', access: 'Full fleet, maintenance, analytics' },
+                  { role: 'Driver', access: 'Dashboard, own trips' },
+                  { role: 'Safety Officer', access: 'Drivers, compliance, reports' },
+                  { role: 'Financial Analyst', access: 'Fuel, expenses, analytics' },
+                ].map(r => (
+                  <div key={r.role} className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>{r.role}</span>
+                    <span>→</span>
+                    <span>{r.access}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       </div>
     </div>
